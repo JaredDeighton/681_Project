@@ -1,0 +1,337 @@
+---
+title: "Project_Code"
+author: "Jared Deighton"
+date: "8/31/2021"
+output: html_document
+---
+
+
+``````{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(deSolve)
+library(tidyr)
+```
+
+
+````{r}
+
+# Read in the different data, for plotting and such
+
+Main_Data <- read_excel("Desktop/Math681/T_cell_data_used_for_modeling-edited2.xlsx", sheet = "edited full dataset", range = "B3:U17")
+
+Weight_Data <- read_excel("Desktop/Math681/T_cell_data_used_for_modeling-edited2.xlsx", sheet = "edited full dataset", range = "B20:U34")
+
+Formatted_Data <-read_excel("Desktop/Math681/T_cell_data_used_for_modeling-edited2.xlsx", sheet = "formatted dataset")
+
+````
+
+NOTES:
+- Unkown parameters are set to 0, and at the bottom of the list
+- IGLN ~ left inguinal lymph node
+- TDLN ~ right inguinal lymph node
+- Lymph flow = plasma flow / 500
+- plasma volume = vascular volume
+- interstitial volume = extra vascular volume
+- Assuming F_bone, F_muscle, etc. = F_tissue = 1
+
+Set the Parameters:
+````{r}
+# Set all the parameters
+ps <- c(
+        J_lung = 1843, 
+        J_heart = 34.9,
+        J_kidney = 87.3,
+        J_brain = 1.4,
+        J_muscle = 0.5,
+        J_bone = 82.6,
+        J_tumor = 0.6,
+        J_skin = 0.6,
+        J_fat = 1.6,
+        J_SI = 12.9,
+        J_LI = 5.2,
+        J_spleen = 114,
+        J_liver = 126.9,
+        J_pancreas = 10,
+        J_other = 86,8,
+        R_kidney = 3.9,
+        R_spleen = 9.8,
+        R_liver = 2.5,
+        E_lung = 0.84,
+        F_tissue = 1,
+        F_heart = 1,
+        F_lung = 1,
+        F_muscle = 1,
+        F_skin = 1,
+        F_fat = 1,
+        F_bone = 1,
+        F_brain = 1,
+        F_kidney = 1,
+        F_liver = 1,
+        F_SI = 1,
+        F_LI = 1,
+        F_pancreas = 1,
+        F_thymus = 1,
+        F_spleen = 1,
+        F_LN = 1,
+        F_other = 1,
+        F_plasma = 1,
+        F_bloodcells = 1,
+        F_tumor = 1,
+        Q_heart = 29.9,
+        Q_lung = 305,
+        Q_muscle = 70.5,
+        Q_skin = 22.8,
+        Q_fat = 11,
+        Q_bone = 12.4,
+        Q_brain = 9.64,
+        Q_kidney = 56.1,
+        Q_liver = 8.4,
+        Q_SI = 47.5,
+        Q_LI = 14.1,
+        Q_pancreas = 5.1,
+        Q_thymus = 0.97,
+        Q_spleen = 6.07,
+        Q_LN = 1.35,
+        Q_others = 8.91,
+        Q_plasma = NA,
+        Q_bloodcells = 305,
+        L_heart = 36.5/500,
+        L_lung = 373/500,
+        L_muscle = 86.1/500,
+        L_skin = 27.8/500,
+        L_fat = 13.4/500,
+        L_bone = 15.2/500,
+        L_brain = 11.8/500,
+        L_kidney = 68.5/500,
+        L_liver = 10.3/500,
+        L_SI = 58.1/500,
+        L_LI = 17.3/500,
+        L_pancreas = 6.24/500,
+        L_thymus = 1.19/500,
+        L_spleen = 8.18/500,
+        L_LN = 1.65/500,
+        L_others = 10.9/500,
+        L_plasma = 373/500,
+        V_heart = 0.152,
+        V_lung = 	0.204,
+        V_muscle = 11.3,
+        V_skin = 5.02,
+        V_fat = 1.98,
+        V_bone = 2.82,
+        V_brain = 0.485,
+        V_kidney = 0.525,
+        V_liver = 1.93,
+        V_SI = 0.728,
+        V_LI = 0.314,
+        V_pancreas = 0.0970,
+        V_thymus = 0.009,
+        V_spleen = 0.127,
+        V_LN = 0.113,
+        V_others = 0.465,
+        V_plasma = 0.944,
+        V_whole_blood = 0.773,
+        V_vascular_heart = 0.00585,
+        V_vascular_lung = 0.0295,
+        V_vascular_muscle = 0.249,
+        V_vascular_skin = 0.188,
+        V_vascular_fat = 0.0218,
+        V_vascular_bone = 0.0621,
+        V_vascular_brain = 0.0107,
+        V_vascular_kidney = 0.0289,
+        V_vascular_liver = 0.164,
+        V_vascular_SI = 0.0116,
+        V_vascular_LI = 0.0050,
+        V_vascular_pancreas = 0.00534,
+        V_vascular_thymus = 0.0005,
+        V_vascular_spleen = 0.0154,
+        V_vascular_others = 0.0195,
+        V_extravascular_heart = 0.0217,
+        V_extravascular_lung = 0.0384,
+        V_extravascular_muscle = 1.47,
+        V_extravascular_skin = 1.66,
+        V_extravascular_fat = 0.337,
+        V_extravascular_bone = 0.525,
+        V_extravascular_brain = 0.0873	,
+        V_extravascular_kidney = 0.0788,
+        V_extravascular_liver = 0.385,
+        V_extravascular_SI = 0.127,
+        V_extravascular_LI = 0.0545	,
+        V_extravascular_pancreas = 0.0169,
+        V_extravascular_thymus = 0.00153,
+        V_extravascular_spleen = 0.0254,
+        V_extravascular_others = 0.0797,
+        Q_tumor = 6,
+        V_tumor = 0.45,
+        L_tumor = 0,
+        L_TDLN = 0,
+        L_IGLN = 0,
+        L_extravascular_kidney = 0,
+        Q_tissue = 0,
+        V_vascular_tissue = 0,
+        V_extravascular_tissue = 0,
+        V_TDLN = 0,
+        V_IGLN = 0,
+        J_tissue = 0
+        )
+````
+      
+      
+Set up the ODEs:
+````{r}
+# Setting up the ODEs
+
+# Given time values to evaluate the ODE (in hours)
+times <- seq(0, 400, 1)
+
+# Initial Conditions, these are currently unknown, set to 0.5 for now. I'm not even sure we use these or not. 
+IC <- c(
+        C_whole_blood = 0.5, C_vascular_lung = 0.5, C_extravascular_lung = 0.5,
+        C_vascular_tissue = 0.5, C_extravascular_tissue = 0.5, C_Rvascular_tissue = 0.5,
+        C_Rextravascular_tissue = 0.5, C_vascular_liver = 0.5, C_extravascular_liver = 0.5,
+        C_LN = 0.5, C_IGLN = 0.5, C_TDLN = 0.5
+        )
+
+
+model <- function (time, init_cond, parameters) {
+  with(as.list(c(init_cond, parameters)), {
+    
+  # WHOLE BLOOD
+  dC_whole_blood <- ( -1 * (ps["Q_lung"] + ps["L_lung"]) * C_whole_blood
+                     + (ps["Q_heart"] - ps["L_heart"]) * C_vascular_heart
+                     + (ps["Q_kidney"] - ps["L_kidney"]) * C_vascular_kidney
+                     + (ps["Q_brain"] - ps["L_brain"]) * C_vascular_brain
+                     + (ps[Q_muscle] - ps["L_muscle"]) * C_vascular_muscle
+                     + (ps["Q_bone"] - ps["L_bone"]) * C_vascular_bone
+                     + (ps["Q_skin"] - ps["L_skin"]) * C_vascular_skin
+                     + (ps["Q_fat"] - ps["L_fat"]) * C_vascular_fat
+                     + ps["Q_SI"] - ps["L_SI"]
+                     + ps["Q_LI"] - ps["L_LI"]
+                     + ps["Q_spleen"] - ps["L_spleen"]
+                     + ps["Q_pancreas"] - ps["L_pancres"]
+                     + (ps["Q_liver"] - ps["L_liver"]) * C_vascular_liver
+                     + (ps["Q_others"] - ps["L_others"]) * C_vascular_others
+                     + ps["L_LN"]*C_LN
+                     ) / ps["V_whole_blood"]
+  
+  # LUNGS
+  ## Vascular
+  dC_vascular_lung <- ( (ps["Q_lung"] + ps["L_lung"]) * C_whole_blood
+                        - ps["Q_lung"] * C_vascular_lung
+                        - ps["J_lung"] * C_vascular_lung * ps["V_vascular_lung"]
+                        - ps["E_lung"] * C_vascular_lung * ps["V_vascular_lung"]
+                        ) / ps["V_vascular_lung"]
+  
+  ## Extra vascular 
+  dC_extravascular_lung <- ( ps["J_lung"] * C_vascular_lung *  ps["V_vascular_lung"]
+                            - ps["L_lung"] * C_extravascular_lung * ps["F_lung"] 
+                            ) / ps["V_extravascular_lung"]
+  # TYPICAL TISSUE
+  ## Vascular
+  dC_vascular_tissue <- ( ps["Q_tissue"] * C_vascular_lung
+                          - (ps["Q_tissue"] - ps["L_tissue"]) * C_vascular_tissue
+                          - ps["J_tissue"] * C_vascular_tissue * ps["V_vascular_tissue"]
+                            ) / ps["V_vascular_tissue"]
+  
+  ## Extra vascular
+  
+  dC_extravascular_tissue <- ( ps["J_tissue"] * C_vascular_tissue * ps["V_vascular_tissue"]
+                              - ps["L_tissue"] * C_extravascular_tissue * ps["F_tissue"]
+                              ) / ps["V_extravascular_tissue"]
+  
+  # TISSUE WITH RETENTION FACTOR
+  
+  ## Vascular
+  dC_Rvascular_tissue <- ( ps["Q_tissue"] * C_vascular_lung
+                          - (ps["Q_tissue"] - ps["L_tissue"]) * C_vascular_tissue
+                          - ps["J_tissue"] * C_vascular_tissue * ps["V_vascular_tissue"]
+                            ) / ps["V_vascular_tissue"]
+  
+  ## Extra vascular
+  dC_Rextravascular_tissue <- ( ps["J_tissue"] * C_vascular_tissue * ps["V_vascular_tissue"]
+                              - ps["L_tissue"] * (C_extravascular_tissue / ps["R_tissue"]) * ps["F_tissue"]
+                              ) / ps["V_extravascular_tissue"]
+  
+  # LIVER
+  ## Vascular
+  dC_vascular_liver <- ( ps["Q_liver"] * C_vascular_lung
+                         + (ps["Q_SI"] - ps["L_SI"]) * C_vascular_SI
+                         + (ps["Q_LI"] - ps["L_LI"]) * C_vascular_LI
+                         + (ps["Q_spleen"] - ps["L_spleen"]) * C_vascular_spleen
+                         + (ps["Q_pancreas"] - ps["L_pancreas"]) * C_vascular_pancreas
+                         - ((ps["Q_SI"] - ps["L_SI"])+ (ps["Q_LI"] - ps["L_LI"]) + (ps["Q_spleen"] - ps["L_spleen"]) 
+                         + (ps["Q_pancreas"] - ps["L_pancreas"]) + (ps["Q_liver"] - ps["L_liver"])) * C_vascular_liver
+                         - ps["J_liver"] * C_vascular_liver * ps["V_vascular_liver"]
+                         ) / ps["V_vascular_liver"]
+  
+  ## Extra vascular
+  dC_extravascular_liver <- ( ps["J_liver"] * C_vascular_liver * ps["V_vascular_liver"]
+                              - ps["L_liver"] * (C_extravascular_liver / ps["R_liver"]) * ps["F_liver"]
+                              ) / ps["V_extravascular_liver"]
+  
+  # LYMPH NODE
+  dC_LN <- ( ps["F_lung"] * ps["L_lung"] * C_extravascular_lung
+             + ps["F_heart"] * ps["L_heart"] * C_extravascular_heart
+             + ps["L_kidney"] * ps["L_extravascular_kidney"] / ps["R_kidney"] * ps["F_kidney"]
+             + ps["F_brain"] * ps["L_brain"] * C_extravascular_brain
+             + C_TDLN * ps["L_TDLN"]
+             + C_IgLN * ps["L_IGLN"]
+             + ps["F_skin"] * ps["L_skin"] * C_extravascular_skin
+             + ps["F_fat"] * ps["L_fat"] * C_extravascular_fat
+             + ps["F_SI"] * ps["L_SI"] * C_extravascular_SI
+             + ps["F_LI"] * ps["L_LI"] * C_extravascular_LI
+             + ps["L_spleen"] * (C_extravascular_spleen / ps["R_spleen"]) * ps["F_spleen"]
+             + ps["F_pancreas"] * ps["L_pancreas"] * C_extravascular_pancres
+             + ps["L_liver"] * (C_extravascular_liver / ps["R_liver"]) * ps["F_liver"]
+             + ps["F_others"] * ps["L_others"] * C_extravascular_others
+             - ps["L_LN"] * C_LN
+             ) / ps["V_LN"]
+  
+  # IGLN
+  dC_IGLN <- ( ps["L_bone"] * ps["F_bone"] / 2 * C_extravascular_bone 
+              + ps["L_muscle"] * ps["F_muscle"] / 2 * C_extravascular_muscle
+              - C_IGLN * ps["L_IGLN"]
+              ) / ps["V_IGLN"]
+  
+  # TDLN
+  dC_TDLN <- ( ps["L_bone"] * ps["F_bone"] / 2 * C_extravascular_bone 
+              + ps["L_muscle"] * ps["F_muscle"] / 2 * C_extravascular_muscle
+              + ps["F_tumor"] * ps["L_tumor"]* C_extravascular_tumor
+              - C_TDLN * ps["L_TDLN"]
+              ) / ps["V_TDLN"]
+  
+  return(list(c(dC_whole_blood, dC_vascular_lung, dC_extravascular_lung,
+                dC_vascular_tissue, dC_extravascular_tissue, dC_Rvascular_tissue,
+                dC_Rextravascular_tissue, dC_vascular_liver, dC_extravascular_liver,
+                dC_LN, dC_IGLN, dC_TDLN,
+                init_cond)))
+  })
+}
+
+````
+
+Get the output, and plotting some solutions
+```{r}
+output <- ode(IC, times, model, ps)
+````
+
+Other shit:     
+`````{r}
+# Plots
+ggplot(data=subset(Hour1, !is.na( )), aes(x=Sepal.Length)) + 
+geom_bar(stat="bin")
+
+plot(Main_Data$hour, Main_Data$lung, type = "b", xlab = "Hours", ylab = "%ID / gram")
+
+
+Hour1 <- filter(Main_Data, hour == 1)
+Hour1 <- Hour1[colSums(is.na(Hour1))==0]
+
+Hour1_aves <- c()
+
+`````
+
+
